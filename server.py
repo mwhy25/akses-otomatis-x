@@ -1,6 +1,6 @@
 """
 Backend API untuk posting ke X dari website abc.com.
-Dibungkus dengan Flask, menggunakan twifork sebagai client X.
+Dibungkus dengan Flask, menggunakan twikit sebagai client X.
 
 MODE PAKAI:
     python server.py           -> jalankan server Flask
@@ -19,7 +19,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from twikit import Client
-# from twifork import Client
 
 # ============================================================
 # KONFIGURASI
@@ -29,6 +28,10 @@ load_dotenv()
 
 AUTH_TOKEN = os.environ.get("X_AUTH_TOKEN", "")
 CT0 = os.environ.get("X_CT0", "")
+
+# Secret bersama dengan Next.js (X_BACKEND_SECRET di env Netlify). Tanpa ini
+# diisi, backend akan menolak SEMUA request -- sengaja, biar tidak lupa set.
+BACKEND_SECRET = os.environ.get("BACKEND_SECRET", "")
 
 ALLOWED_ORIGINS = os.environ.get(
     "ALLOWED_ORIGINS",
@@ -58,6 +61,13 @@ def validasi_env():
     if not AUTH_TOKEN or not CT0:
         return False, "Environment variable X_AUTH_TOKEN / X_CT0 belum di-set."
     return True, None
+
+
+def cek_secret() -> bool:
+    """True kalau header X-Secret dari pemanggil cocok dengan BACKEND_SECRET."""
+    if not BACKEND_SECRET:
+        return False
+    return request.headers.get("X-Secret", "") == BACKEND_SECRET
 
 
 def async_route(f):
@@ -126,11 +136,9 @@ async def test_post_gambar():
     try:
         client = buat_client()
 
-        # Upload gambar
         media_id = await client.upload_media(GAMBAR_TEST)
         print(f"[+] Gambar terupload. media_id: {media_id}")
 
-        # Kirim tweet
         print("[...] Mengirim tweet dengan gambar...")
         result = await client.create_tweet(
             text=TEKS_TEST,
@@ -143,7 +151,7 @@ async def test_post_gambar():
 
 
 # ============================================================
-# ENDPOINT API (untuk dipanggil frontend)
+# ENDPOINT API (untuk dipanggil frontend/Next.js)
 # ============================================================
 
 @app.route("/", methods=["GET"])
@@ -157,6 +165,8 @@ def root():
 
 @app.route("/health", methods=["GET"])
 def health():
+    # TIDAK butuh secret -- ini dipanggil layanan uptime (UptimeRobot dkk)
+    # supaya Render free tier tidak tidur, jadi harus tetap publik.
     ok, err = validasi_env()
     return jsonify({
         "status": "ok" if ok else "error",
@@ -168,6 +178,9 @@ def health():
 @app.route("/post", methods=["POST"])
 @async_route
 async def post_text():
+    if not cek_secret():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
     ok, err = validasi_env()
     if not ok:
         return jsonify({"success": False, "error": err}), 500
@@ -202,6 +215,9 @@ async def post_text():
 @app.route("/post-with-image", methods=["POST"])
 @async_route
 async def post_with_image():
+    if not cek_secret():
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
     ok, err = validasi_env()
     if not ok:
         return jsonify({"success": False, "error": err}), 500
@@ -278,7 +294,6 @@ def error_server(e):
 # ============================================================
 
 if __name__ == "__main__":
-    # Mode test: langsung posting hardcode
     if "--test" in sys.argv:
         asyncio.run(test_post_teks())
         sys.exit(0)
@@ -287,18 +302,18 @@ if __name__ == "__main__":
         asyncio.run(test_post_gambar())
         sys.exit(0)
 
-    # Mode default: jalankan server Flask
     port = int(os.environ.get("PORT", 5000))
     print("=" * 60)
     print(f"  SERVER BERJALAN DI PORT {port}")
     print("=" * 60)
     print(f"  Cookie terkonfigurasi: {bool(AUTH_TOKEN and CT0)}")
+    print(f"  Secret terkonfigurasi: {bool(BACKEND_SECRET)}")
     print(f"  Allowed origins: {ALLOWED_ORIGINS}")
     print()
     print("  Endpoint:")
     print(f"    GET  http://localhost:{port}/health")
-    print(f"    POST http://localhost:{port}/post")
-    print(f"    POST http://localhost:{port}/post-with-image")
+    print(f"    POST http://localhost:{port}/post           (butuh header X-Secret)")
+    print(f"    POST http://localhost:{port}/post-with-image (butuh header X-Secret)")
     print()
     print("  Untuk test posting hardcode, jalankan:")
     print("    python server.py --test")
