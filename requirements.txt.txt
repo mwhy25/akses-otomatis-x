@@ -1,0 +1,24 @@
+# Core: client X tidak resmi
+twifork>=0.1.0
+
+# Untuk backend API (jika pakai Flask)
+Flask>=3.0.0
+flask-cors>=4.0.0
+gunicorn>=21.2.0
+
+# Untuk parsing HTML/XML internal twifork
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# Untuk HTTP client
+httpx>=0.27.0
+
+# Untuk impersonate TLS fingerprint (opsional tapi disarankan)
+# twifork[impersonate]  ->  tambahkan ini jika ingin melewati blokir TLS
+curl-cffi>=0.7.0
+
+# Untuk environment variable
+python-dotenv>=1.0.0
+
+# Untuk handle file upload dari form website
+Werkzeug>=3.0.0
